@@ -130,7 +130,6 @@ int WinMain(HINSTANCE hThisInstance, HINSTANCE hPrevInstance, LPSTR lpszArgument
 	if (pBlob != 0) pBlob->Release();
 #else
 	ID3D10Blob* pBlob;
-	//_imp__D3DX11CompileFromMemory(shader, 1024, 0, 0, 0, "cs_5_0", "cs_5_0", 0, 0, 0, &pBlob, 0, 0);
 	D3DX11CompileFromMemory(shader, 1024, 0, 0, 0, "cs_5_0", "cs_5_0", 0, 0, 0, &pBlob, 0, 0); 
 	pd3dDevice->CreateComputeShader((void*)(((int*)pBlob)[3]), ((int*)pBlob)[2], NULL, &pCS);
 #endif
