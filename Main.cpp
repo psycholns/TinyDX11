@@ -112,7 +112,7 @@ int WinMain(HINSTANCE hThisInstance, HINSTANCE hPrevInstance, LPSTR lpszArgument
 #ifdef _DEBUG
 	ID3D10Blob* pErrorBlob = NULL;
 	ID3D10Blob* pBlob = NULL;
-	hr = _imp__D3DX11CompileFromMemory(shader, sizeof(shader), 0, 0, 0, "cs_5_0", "cs_5_0", D3D10_SHADER_DEBUG, 0, 0, &pBlob, &pErrorBlob, 0);
+	hr = D3DX11CompileFromMemory(shader, sizeof(shader), 0, 0, 0, "cs_5_0", "cs_5_0", D3D10_SHADER_DEBUG, 0, 0, &pBlob, &pErrorBlob, 0);
 	if (FAILED(hr))
 	{
 		char message[4096];

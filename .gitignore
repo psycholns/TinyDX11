@@ -194,3 +194,8 @@ FakesAssemblies/
 
 # Visual Studio 6 workspace options file
 *.opt
+report.html
+*.tlog
+link.exe
+Crinkler/TinyDX11.exe
+Main.asm
