@@ -54,16 +54,15 @@ static int SwapChainDesc[] = {
 	0, // hwnd
 	1, 0, 0 }; // windowed, swap_discard, flags
 
-static D3D11_BUFFER_DESC ConstBufferDesc = { 256, D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 }; // 256,0,4,0,0,0
+//static D3D11_BUFFER_DESC ConstBufferDesc = { 256, D3D11_USAGE_DEFAULT, D3D11_BIND_CONSTANT_BUFFER, 0, 0, 0 }; // 256,0,4,0,0,0
 
 // just a hlsl adaption of "No Chrome Spheres Permitted" to have something
 static char shader[] =
-"int t;"  // implicit constant buffer
-"RWTexture2D<float3> y;"
-"[numthreads(8,8,1)]"
-"void cs_5_0(uint3 i:sv_dispatchthreadid)"
+"RWTexture2D<float4> y;"
+"float4 vs_5_0(uint k:sv_vertexid,uint t:sv_instanceid) : sv_position"
 "{"
-"float3 v=i/float3(640,400,1)-1,"
+"float3 i=float3(k%1280,k/1280,0),"
+"v=i/float3(640,400,1)-1,"
 "w=normalize(float3(v.x,-v.y*.8-1,2)),"
 "p=float3(sin(t*.0044),sin(t*.0024)+2,sin(t*.0034)-5);"
 "float b=dot(w,p),d=b*b-dot(p,p)+1,x=0;"
@@ -76,8 +75,10 @@ static char shader[] =
 "p-=w*(p.y+1)/w.y;"
 "x+=(sin(p.z*6)*sin(p.x*6)>0)*2/length(p);"
 "}"
-"y[i.xy]=abs(v.y-v.x)>.1&&abs(v.y+v.x)>.1?x:float3(1,0,0);"
+"return y[i.xy]=abs(v.y-v.x)>.1&&abs(v.y+v.x)>.1?x:float4(1,0,0,0);"
 "}";
+
+D3D_FEATURE_LEVEL FeatureLevels = D3D_FEATURE_LEVEL_11_1;
 
 
 #ifndef _DEBUG
@@ -99,28 +100,23 @@ int WinMain(HINSTANCE hThisInstance, HINSTANCE hPrevInstance, LPSTR lpszArgument
 	ID3D11DeviceContext*        pImmediateContext;
 	IDXGISwapChain*             pSwapChain;
 #ifdef _DEBUG	
-	HRESULT hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, D3D11_CREATE_DEVICE_DEBUG, 0, 0, D3D11_SDK_VERSION, (DXGI_SWAP_CHAIN_DESC*)&SwapChainDesc[0], &pSwapChain, &pd3dDevice, NULL, &pImmediateContext);
+	HRESULT hr = D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, D3D11_CREATE_DEVICE_DEBUG, &FeatureLevels,1, D3D11_SDK_VERSION, (DXGI_SWAP_CHAIN_DESC*)&SwapChainDesc[0], &pSwapChain, &pd3dDevice, NULL, &pImmediateContext);
 	if (FAILED(hr)) return hr;
 #else
-	D3D11CreateDeviceAndSwapChain( NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, 0,0, D3D11_SDK_VERSION, (DXGI_SWAP_CHAIN_DESC*)&SwapChainDesc[0], &pSwapChain, &pd3dDevice, NULL, &pImmediateContext );
+	D3D11CreateDeviceAndSwapChain( NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, &FeatureLevels,1, D3D11_SDK_VERSION, (DXGI_SWAP_CHAIN_DESC*)&SwapChainDesc[0], &pSwapChain, &pd3dDevice, NULL, &pImmediateContext );
 #endif
 
 	// unordered access view on back buffer
 	pSwapChain->GetBuffer(0, __uuidof( ID3D11Texture2D ), (LPVOID*)&SwapChainDesc[0]);	// reuse swapchain struct for temp storage of texture pointer
 	pd3dDevice->CreateUnorderedAccessView((ID3D11Texture2D*)SwapChainDesc[0], NULL, (ID3D11UnorderedAccessView**)&SwapChainDesc[0]);
-	pImmediateContext->CSSetUnorderedAccessViews(0, 1, (ID3D11UnorderedAccessView**)&SwapChainDesc[0], 0);
+	pImmediateContext->OMSetRenderTargetsAndUnorderedAccessViews(0, 0, 0, 0, 1, (ID3D11UnorderedAccessView**)&SwapChainDesc[0], 0);
 
-	// constant buffer
-	ID3D11Buffer *pConstants;
-	pd3dDevice->CreateBuffer(&ConstBufferDesc, NULL, &pConstants);
-	pImmediateContext->CSSetConstantBuffers(0, 1, &pConstants);
-
-	// compute shader
-	ID3D11ComputeShader *pCS;
+	// vertex shader
+	ID3D11VertexShader *pVS;
 #ifdef _DEBUG
 	ID3D10Blob* pErrorBlob = NULL;
 	ID3D10Blob* pBlob = NULL;
-	hr = D3DCompile(shader, sizeof(shader), 0, 0, 0, "cs_5_0", "cs_5_0", D3D10_SHADER_DEBUG, 0, &pBlob, &pErrorBlob);
+	hr = D3DCompile(shader, sizeof(shader), 0, 0, 0, "vs_5_0", "vs_5_0", D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_VALIDATION, 0, &pBlob, &pErrorBlob);
 
 	if (FAILED(hr))
 	{
@@ -132,26 +128,24 @@ int WinMain(HINSTANCE hThisInstance, HINSTANCE hPrevInstance, LPSTR lpszArgument
 		return 10;
 	}
 	else
-		hr = pd3dDevice->CreateComputeShader((DWORD*)pBlob->GetBufferPointer(), pBlob->GetBufferSize(), NULL, &pCS);
+		hr = pd3dDevice->CreateVertexShader((DWORD*)pBlob->GetBufferPointer(), pBlob->GetBufferSize(), NULL, &pVS);
 	void *pp = pBlob->GetBufferPointer(); int ps = pBlob->GetBufferSize();
 	//int* bla = (int*)pBlob; void* pp2 = (void*)bla[3]; int ps2 = bla[2]; // yep, they are the same, check crinkler version below
 	if (pErrorBlob != 0) pErrorBlob->Release();
 	if (pBlob != 0) pBlob->Release();
 #else
 	ID3D10Blob* pBlob;
-	D3DCompile(shader, 1024, 0, 0, 0, "cs_5_0", "cs_5_0", 0, 0, &pBlob, 0); // We can use some abitary large value for size, null terminated anyway...
+	D3DCompile(shader, 1024, 0, 0, 0, "vs_5_0", "vs_5_0", D3DCOMPILE_SKIP_VALIDATION, 0, &pBlob, 0); // We can use some abitary large value for size, null terminated anyway...
 
-	pd3dDevice->CreateComputeShader((void*)(((int*)pBlob)[3]), ((int*)pBlob)[2], NULL, &pCS);
+	pd3dDevice->CreateVertexShader((void*)(((int*)pBlob)[3]), ((int*)pBlob)[2], NULL, &pVS);
 #endif
-	pImmediateContext->CSSetShader(pCS, NULL, 0);
-
+	pImmediateContext->VSSetShader(pVS, NULL, 0);
+	pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST); // we will draw points, one for each pixel
 	do
 	{
 		PeekMessageA(0, 0, 0, 0, PM_REMOVE); // unanswered input may kill you - at least in windowed mode
-		
-		SwapChainDesc[0] = GetTickCount();   // please use something better (from the music), this is too coarse..
-		pImmediateContext->UpdateSubresource(pConstants, 0, 0, &SwapChainDesc[0], 0, 0);
-		pImmediateContext->Dispatch(WIDTH / 8, HEIGHT / 8, 1);
+		// no, can't pass StartInstanceLocation before 6.8: https://microsoft.github.io/DirectX-Specs/d3d/HLSL_ShaderModel6_8.html
+		pImmediateContext->DrawInstanced((WIDTH * HEIGHT+0xffff)&0xffff0000, 1, 0,GetTickCount());
 		pSwapChain->Present(0, 0);
 	} 
 	while (!GetAsyncKeyState(VK_ESCAPE));
